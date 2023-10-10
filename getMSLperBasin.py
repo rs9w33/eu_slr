@@ -1,40 +1,18 @@
-# %%
 import xarray as xr
-import os
+import os, regionmask
 import geopandas as gpd
-import regionmask
-import matplotlib.pyplot as plt
+import pandas as pd
 
-# %% read in shapefile and all the netcdf files 
+# read in shapefile and all the netcdf files 
 shp = gpd.read_file(r'ices_ecoregions.gpkg')
 shp = shp.to_crs(4326)
 
-#exploded=shp.explode(index_parts=False)
-#shp['mean_sealevel'] =''
-
-#%%
 files = [os.path.join('.', 'reanalysis', i) for i in os.listdir(r'.\reanalysis') if '2010' in i]
 dx = xr.open_mfdataset(r'.\reanalysis\*.nc')
 
-# %% mask the  netcdf files 
-shp_mask = regionmask.mask_geopandas(
-                shp, 
-                dx.station_x_coordinate, 
-                dx.station_y_coordinate,
-                wrap_lon=180)
-ds_mask = dx.where(~shp_mask.isnull(), drop=True)
-
-# Calculate the mean along the time dimension pver the masked dataset
-yearly_mean = ds_mask['waterlevel'].groupby('time.year').mean(dim='time')
-
-# %% plotting to make sure we have the correct data
-y = yearly_mean['station_y_coordinate'].values
-x = yearly_mean['station_x_coordinate'].values
-# Create a scatter plot
-plt.scatter(x, y, color='red', marker='o')
-
-# %%
+# iterate over each basin
 for index, row in shp.iterrows():
+
     # Get the polygon geometry
     polygon = gpd.GeoSeries(row.geometry, crs='EPSG:4326')
 
@@ -47,11 +25,10 @@ for index, row in shp.iterrows():
     basin = dx.where(~regmask.isnull(),drop=True)
     basinAvg = basin.waterlevel.groupby('time.year').mean(dim='time').mean(dim='stations')
     
-    clipped_data = yearly_mean.sel(latitude=slice(polygon.bounds.miny, polygon.bounds.maxy), 
-                          longitude=slice(polygon.bounds.minx, polygon.bounds.maxx))
+    df = basinAvg.to_dataframe().transpose().reset_index().drop('index', axis=1)
+    gdf = gpd.GeoDataFrame(row).transpose()
 
-    # Calculate average for a specific variable (e.g., 'temperature')
-    avg = clipped_data['waterlevel'].mean(dim='time')
-
-    shp['mean_waterlevel'][index]= avg
-# %%
+    basindf = gpd.GeoDataFrame(
+        pd.concat([gdf.reset_index(), df.reset_index()], axis=1))
+    basindf.crs = 'EPSG:4326'
+    
