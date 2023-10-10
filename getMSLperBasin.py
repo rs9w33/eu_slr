@@ -33,12 +33,28 @@ for index, row in shp.iterrows():
             pd.concat([gdf.reset_index(), df.reset_index()], axis=1))
         basindf.crs = 'EPSG:4326'
 
+        name = row['Ecoregion'].replace(' ', '_')
+
+        if not os.path.exists(os.path.join('.', 'shapefile')):
+            os.makedirs(os.path.join('.', 'shapefile'))
+
+        #cannot have ints as column headers so convert to str before saving
+        basindf.columns = [str(col) for col in basindf.columns]
+        basindf.drop(columns=['index'], inplace=True)
+
+        #add unit
+        columns=basindf.columns.tolist()
+        columns.insert(6, 'Unit')
+        basindf_n = basindf.reindex(columns=columns)
+        basindf_n['Unit'] = 'sea_surface_height_in_meters'
+
+        basindf_n.to_file(os.path.join('.','shapefile', name + '.shp'))
+
         if not os.path.exists(os.path.join('.', 'csv')):
             os.makedirs(os.path.join('.', 'csv'))
 
-        name = row['Ecoregion'].replace(' ', '_')
-
-        df.transpose().to_csv(os.path.join('.', 'csv', name + '.csv'))
+        dft = df.transpose()
+        dft.rename(columns={dft.columns[0]: 'sea_surface_height_in_meters'}).to_csv(os.path.join('.', 'csv', name + '.csv'))
 
         
 
